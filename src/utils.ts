@@ -1,26 +1,33 @@
-// Source: https://gist.github.com/VityaSchel/77e482daf2ac688c18d39b126583fc86
-
+// FIXED: DC migrate handling in sendCode
 export async function getUser() {
   try {
     const user = await global.api.call('users.getFullUser', {
-      id: {
-        _: 'inputUserSelf',
-      },
+      id: { _: 'inputUserSelf' },
     })
-
     return user
   } catch (error) {
     return null
   }
 }
 
-export function sendCode(phone) {
-  return global.api.call('auth.sendCode', {
-    phone_number: phone,
-    settings: {
-      _: 'codeSettings',
-    },
-  })
+export async function sendCode(phone) {
+  try {
+    return await global.api.call('auth.sendCode', {
+      phone_number: phone,
+      settings: { _: 'codeSettings' },
+    })
+  } catch (error) {
+    if (error.error_message === 'PHONE_MIGRATE_5') {
+      console.log('🔄 sendCode: Auto-migrating to DC 5...')
+      await global.api.setDefaultDc(5)
+      await global.api.storage.set({ currentDcId: 5 })
+      return await global.api.call('auth.sendCode', {
+        phone_number: phone,
+        settings: { _: 'codeSettings' },
+      })
+    }
+    throw error
+  }
 }
 
 export function signIn({ code, phone, phone_code_hash }) {
@@ -55,50 +62,40 @@ export function checkPassword({ srp_id, A, M1 }) {
   })
 }
 
-export function mtprotoEntitiesToBotAPI(mtprotoEntities: object[]): object[] {
+export function mtprotoEntitiesToBotAPI(mtprotoEntities) {
   return mtprotoEntities.map(mtprotoEntity => {
     let entity = {}
     switch (mtprotoEntity['_']) {
       case 'messageEntityBold':
         entity = { type: 'bold' }
         break
-
       case 'messageEntityTextUrl':
         entity = { type: 'text_link', url: mtprotoEntity['url'] }
         break
-
       case 'messageEntityUrl':
         entity = { type: 'url' }
         break
-
       case 'messageEntityItalic':
         entity = { type: 'italic' }
         break
-
       case 'messageEntityUnderline':
         entity = { type: 'underline' }
         break
-
       case 'messageEntityCode':
         entity = { type: 'code' }
         break
-
       case 'messageEntityPre':
         entity = { type: 'pre', language: mtprotoEntity['language'] }
         break
-
       case 'messageEntityStrike':
         entity = { type: 'strikethrough' }
         break
-
       case 'messageEntityBlockquote':
         entity = { type: 'code' }
         break
-
       case 'messageEntitySpoiler':
         entity = { type: 'spoiler' }
         break
-
       default:
         return null
     }
