@@ -51,13 +51,32 @@ export async function getUser() {
 }
 
 export function sendCode(phone: string) {
-  return safeCall('auth.sendCode', {
-    phone_number: phone,
-    settings: {
-      _: 'codeSettings',
+  return safeCall('invokeWithLayer', {
+    layer: 181, // current safe MTProto layer
+
+    query: {
+      _: 'initConnection',
+
+      api_id: Number(process.env.APP_ID),
+
+      device_model: 'NodeJS',
+      system_version: process.version,
+      app_version: '1.0.0',
+      system_lang_code: 'en',
+      lang_pack: '',
+      lang_code: 'en',
+
+      query: {
+        _: 'auth.sendCode',
+        phone_number: phone,
+        settings: {
+          _: 'codeSettings',
+        },
+      },
     },
   })
 }
+
 
 export function signIn({
   code,
