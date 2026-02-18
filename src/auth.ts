@@ -9,31 +9,41 @@ export default async function authorize() {
     process.exit(0)
   }
 
-  const phone = process.env.PHONE || readlineSync.question('Enter phone (+60xxxxxxxxx): ')
-  
+  const phone = process.env.PHONE_NUMBER || process.env.PHONE
+  if (!phone) {
+    throw new Error('Set PHONE_NUMBER (or PHONE) in your .env file, e.g. PHONE_NUMBER=+60xxxxxxxxx')
+  }
+
+  console.log(`Using phone from .env: ${phone}`)
   console.log('Sending verification code...')
   const { phone_code_hash } = await sendCode(phone)
-  
+
   const code = readlineSync.question('Enter verification code: ')
-  
+
   try {
     await signIn({
       phone,
       phone_code_hash,
-      code
+      code,
     })
-  } catch (error) {
+  } catch (error: any) {
     switch (error.error_message) {
       case 'SESSION_PASSWORD_NEEDED':
         try {
           const { srp_id, current_algo, srp_B } = await getPassword()
           const { g, p, salt1, salt2 } = current_algo
           const { A, M1 } = await global.api.crypto.getSRPParams({
-            g, p, salt1, salt2, gB: srp_B,
-            password: process.env.TWO_FA_PASSWORD || readlineSync.question('Enter 2FA password: ')
+            g,
+            p,
+            salt1,
+            salt2,
+            gB: srp_B,
+            password:
+              process.env.TWO_FA_PASSWORD ||
+              readlineSync.question('Enter 2FA password: '),
           })
           await checkPassword({ srp_id, A, M1 })
-        } catch (e) {
+        } catch (e: any) {
           if (e.error_message === 'PASSWORD_HASH_INVALID') {
             console.log('Wrong 2FA password!')
             return await authorize()
@@ -48,8 +58,10 @@ export default async function authorize() {
         throw error
     }
   }
-  
+
   // Now safe: get user post-auth
-  const { users } = await global.api.call('users.getUsers', [{ _: 'inputUserSelf' }])
+  const { users } = await global.api.call('users.getUsers', [
+    { _: 'inputUserSelf' },
+  ])
   return { users }
 }
