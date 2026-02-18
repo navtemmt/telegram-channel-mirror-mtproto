@@ -11,12 +11,14 @@ import * as Yup from 'yup'
 const __dirname = dirname(fileURLToPath(import.meta.url)) + '/'
 const config = JSON.parse(await fs.readFile(__dirname + '../config.json', 'utf-8'))
 const pollInterval = config['interval'] //15 * 60 * 1000
+
 await Yup.object({
   native_copy: Yup.mixed().oneOf(['auto', 'auto_LEGACY', true, false]).required(),
   report_errors_to_telegram: Yup.bool().required(),
   interval: Yup.number().integer().positive().required(),
   limit: Yup.number().integer().min(1).max(100).required(),
 }).validate(config)
+
 global.config = config
 
 try {
@@ -24,17 +26,45 @@ try {
     api_id: Number(process.env.APP_ID),
     api_hash: process.env.APP_HASH,
     
-
     storageOptions: { path: __dirname + '../tempdata.json' }
   })
+  
   global.api = api
-
+  
   const session = await authorize()
   const user = session.users[0]
   console.log(`User ${user.first_name} ${user.last_name} is authentificated, bot has started working.`)
-
-  const resolvedPeer = await api.call('contacts.resolveUsername', { username: process.env.FROM_USERNAME })
-  global.channel = resolvedPeer.chats[0]
+  
+  // NEW CODE: Support both username and channel ID for source channel
+  if (process.env.FROM_CHANNEL_ID) {
+    // Method for private channels: Use channel ID from dialogs
+    console.log('Using FROM_CHANNEL_ID for source channel (private channel support)')
+    const dialogs = await api.call('messages.getDialogs', {
+      offset_date: 0,
+      offset_id: 0,
+      offset_peer: { _: 'inputPeerEmpty' },
+      limit: 200,
+      hash: 0
+    })
+    
+    const targetChannelId = Number(process.env.FROM_CHANNEL_ID)
+    global.channel = dialogs.chats.find(chat => 
+      (chat._ === 'channel' || chat._ === 'channelForbidden') && chat.id === targetChannelId
+    )
+    
+    if (!global.channel) {
+      throw new Error(`Channel with ID ${targetChannelId} not found in your dialogs. Make sure you're a member of this channel.`)
+    }
+    console.log(`Found source channel: ${global.channel.title || 'Untitled'} (ID: ${global.channel.id})`)
+  } else if (process.env.FROM_USERNAME) {
+    // Original method for public channels with username
+    console.log('Using FROM_USERNAME for source channel (public channel)')
+    const resolvedPeer = await api.call('contacts.resolveUsername', { username: process.env.FROM_USERNAME })
+    global.channel = resolvedPeer.chats[0]
+  } else {
+    throw new Error('You must set either FROM_USERNAME or FROM_CHANNEL_ID in .env file')
+  }
+  
   if (['auto', 'auto_LEGACY'].includes(global.config.native_copy)) {
     global.copy_natively = !global.channel.noforwards
     global.force_copy_natively_override = true
@@ -44,10 +74,34 @@ try {
   } else {
     throw 'Unknown config.native_copy option value.'
   }
-
-  const targetPeer = await api.call('contacts.resolveUsername', { username: process.env.TO_USERNAME })
-  global.target = targetPeer.chats[0]
-
+  
+  // Support both username and channel ID for destination channel
+  if (process.env.TO_CHANNEL_ID) {
+    console.log('Using TO_CHANNEL_ID for destination channel')
+    const dialogs = await api.call('messages.getDialogs', {
+      offset_date: 0,
+      offset_id: 0,
+      offset_peer: { _: 'inputPeerEmpty' },
+      limit: 200,
+      hash: 0
+    })
+    
+    const targetChannelId = Number(process.env.TO_CHANNEL_ID)
+    global.target = dialogs.chats.find(chat => 
+      (chat._ === 'channel' || chat._ === 'channelForbidden') && chat.id === targetChannelId
+    )
+    
+    if (!global.target) {
+      throw new Error(`Destination channel with ID ${targetChannelId} not found in your dialogs.`)
+    }
+    console.log(`Found destination channel: ${global.target.title || 'Untitled'} (ID: ${global.target.id})`)
+  } else if (process.env.TO_USERNAME) {
+    const targetPeer = await api.call('contacts.resolveUsername', { username: process.env.TO_USERNAME })
+    global.target = targetPeer.chats[0]
+  } else {
+    throw new Error('You must set either TO_USERNAME or TO_CHANNEL_ID in .env file')
+  }
+  
   await poll()
   setInterval(() => poll(), pollInterval)
 } catch(e) {
