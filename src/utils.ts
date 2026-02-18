@@ -50,10 +50,21 @@ export async function getUser() {
   }
 }
 
-export function sendCode(phone: string) {
+function getPhoneOrThrow(explicitPhone?: string): string {
+  const phoneNumber = explicitPhone || process.env.PHONE_NUMBER
+  if (!phoneNumber) {
+    throw new Error(
+      'PHONE_NUMBER is not set in .env and no phone argument was provided'
+    )
+  }
+  return phoneNumber
+}
+
+export function sendCode(phone?: string) {
+  const phoneNumber = getPhoneOrThrow(phone)
+
   return safeCall('invokeWithLayer', {
     layer: 181, // current safe MTProto layer
-
     query: {
       _: 'initConnection',
 
@@ -68,7 +79,7 @@ export function sendCode(phone: string) {
 
       query: {
         _: 'auth.sendCode',
-        phone_number: phone,
+        phone_number: phoneNumber,
         settings: {
           _: 'codeSettings',
         },
@@ -77,19 +88,20 @@ export function sendCode(phone: string) {
   })
 }
 
-
 export function signIn({
   code,
   phone,
   phone_code_hash,
 }: {
   code: string
-  phone: string
+  phone?: string
   phone_code_hash: string
 }) {
+  const phoneNumber = getPhoneOrThrow(phone)
+
   return safeCall('auth.signIn', {
     phone_code: code,
-    phone_number: phone,
+    phone_number: phoneNumber,
     phone_code_hash,
   })
 }
@@ -98,11 +110,13 @@ export function signUp({
   phone,
   phone_code_hash,
 }: {
-  phone: string
+  phone?: string
   phone_code_hash: string
 }) {
+  const phoneNumber = getPhoneOrThrow(phone)
+
   return safeCall('auth.signUp', {
-    phone_number: phone,
+    phone_number: phoneNumber,
     phone_code_hash,
     first_name: 'MTProto',
     last_name: 'Core',
