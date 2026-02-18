@@ -67,8 +67,23 @@ async function resetNativeCopySetting() {
   // and native_copy is set to "auto", the bot will switch loaded config and notify user.
   if (global.config.native_copy !== 'auto_LEGACY') return
   
-  const resolvedPeer = await global.api.call('contacts.resolveUsername', { username: process.env.FROM_USERNAME })
-  const channel = resolvedPeer.chats[0]
+  let channel
+  if (process.env.FROM_CHANNEL_ID) {
+    // For private channels, get from dialogs
+    const dialogs = await global.api.call('messages.getDialogs', {
+      offset_date: 0,
+      offset_id: 0,
+      offset_peer: { _: 'inputPeerEmpty' },
+      limit: 200,
+      hash: 0
+    })
+    const targetChannelId = Number(process.env.FROM_CHANNEL_ID)
+    channel = dialogs.chats.find(chat => chat.id === targetChannelId)
+  } else {
+    const resolvedPeer = await global.api.call('contacts.resolveUsername', { username: process.env.FROM_USERNAME })
+    channel = resolvedPeer.chats[0]
+  }
+  
   if (global.copy_natively !== !channel.noforwards) {
     global.copy_natively = !channel.noforwards
     console.log('config.native_copy was set to "auto". Channel admin changed noforwards settings, switching loaded config in real-time... Bot is now copying messages', channel.noforwards ? 'using bypassing algorithm' : 'natively')
