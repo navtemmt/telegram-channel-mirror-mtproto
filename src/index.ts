@@ -28,24 +28,13 @@ try {
     
     storageOptions: { path: __dirname + '../tempdata.json' },
     // FIXED: Force DC 5 primary servers
-    dcOptions: [
-      { id: 5, host: '149.154.167.40', port: 443 },
-      { id: 5, host: '149.154.175.53', port: 443 }
-    ]
+    
   })
   
   global.api = api
   
   // FIXED: Auto-handle PHONE_MIGRATE_5 & NETWORK_MIGRATE during auth.sendCode
-  global.api.updates.on('error', async (error) => {
-    const migrateMatch = error.error_message.match(/^(PHONE|NETWORK|FILE|PHONE_MIGRATE)_(MIGRATE_)?(\d+)$/i)
-    if (migrateMatch) {
-      const dcId = parseInt(migrateMatch[3])
-      await global.api.storage.set({ currentDcId: dcId })
-      await global.api.setDefaultDc(dcId)
-      console.log(`🔄 Auto-migrated to DC ${dcId} (${error.error_message})`)
-    }
-  })
+
   
   const session = await authorize()
   const user = session.users[0]
