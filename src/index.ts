@@ -26,7 +26,12 @@ try {
     api_id: Number(process.env.APP_ID),
     api_hash: process.env.APP_HASH,
     
-    storageOptions: { path: __dirname + '../tempdata.json' }
+    storageOptions: { path: __dirname + '../tempdata.json' },
+    // FIXED: Force DC 5 for PHONE_MIGRATE_5 (your phone's DC)
+    dcOptions: [
+      { id: 5, host: '149.154.167.40', port: 443 },
+      { id: 5, host: '149.154.175.53', port: 443 }
+    ]
   })
   
   global.api = api
