@@ -27,7 +27,7 @@ try {
     api_hash: process.env.APP_HASH,
     
     storageOptions: { path: __dirname + '../tempdata.json' },
-    // FIXED: Force DC 5 for PHONE_MIGRATE_5 (your phone's DC)
+    // FIXED: Force DC 5 primary servers
     dcOptions: [
       { id: 5, host: '149.154.167.40', port: 443 },
       { id: 5, host: '149.154.175.53', port: 443 }
@@ -36,13 +36,23 @@ try {
   
   global.api = api
   
+  // FIXED: Auto-handle PHONE_MIGRATE_5 & NETWORK_MIGRATE during auth.sendCode
+  global.api.updates.on('error', async (error) => {
+    const migrateMatch = error.error_message.match(/^(PHONE|NETWORK|FILE|PHONE_MIGRATE)_(MIGRATE_)?(\d+)$/i)
+    if (migrateMatch) {
+      const dcId = parseInt(migrateMatch[3])
+      await global.api.storage.set({ currentDcId: dcId })
+      await global.api.setDefaultDc(dcId)
+      console.log(`🔄 Auto-migrated to DC ${dcId} (${error.error_message})`)
+    }
+  })
+  
   const session = await authorize()
   const user = session.users[0]
-  console.log(`User ${user.first_name} ${user.last_name} is authentificated, bot has started working.`)
+  console.log(`✅ User ${user.first_name} ${user.last_name} authenticated. Bot started.`)
   
   // NEW CODE: Support both username and channel ID for source channel
   if (process.env.FROM_CHANNEL_ID) {
-    // Method for private channels: Use channel ID from dialogs
     console.log('Using FROM_CHANNEL_ID for source channel (private channel support)')
     const dialogs = await api.call('messages.getDialogs', {
       offset_date: 0,
@@ -62,7 +72,6 @@ try {
     }
     console.log(`Found source channel: ${global.channel.title || 'Untitled'} (ID: ${global.channel.id})`)
   } else if (process.env.FROM_USERNAME) {
-    // Original method for public channels with username
     console.log('Using FROM_USERNAME for source channel (public channel)')
     const resolvedPeer = await api.call('contacts.resolveUsername', { username: process.env.FROM_USERNAME })
     global.channel = resolvedPeer.chats[0]
@@ -120,7 +129,8 @@ try {
       })
     })
   } else {
-    throw e
+    console.error('❌ Error:', e.message || e)
+    console.error(JSON.stringify(e, Object.getOwnPropertyNames(e)))
   }
   process.exit(1)
 }
